@@ -1,9 +1,9 @@
 package cFrameWork
 
 import (
-	"cFrameWork/cFrameWork/cConfigHelper"
-	"cFrameWork/cFrameWork/cLogHelper"
-	"cFrameWork/cFrameWork/cNatsHelper"
+	"cFrameWork/cConfigHelper"
+	"cFrameWork/cLogHelper"
+	"cFrameWork/cNatsHelper"
 	"errors"
 )
 
