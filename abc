@@ -1,0 +1,191 @@
+package cLog
+
+import (
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+const (
+	_FILE_PATH_ = "./log"
+	_FILE_SUFFIX_ = "txt"
+)
+
+func init() {
+	debugLog = &cLog{
+		logLevel:logLevel[Debug],
+		logFilePath: _FILE_PATH_,
+		msgChan:     make(chan string, 5000),
+	}
+}
+
+func LoadcLog() error {
+	return debugLog.load()
+}
+
+var debugLog *cLog
+
+type cLog struct {
+	logLevel string
+
+	logger *log.Logger
+
+	file *os.File
+	logFilePath string
+	logFileName string
+
+	msgChan chan string
+}
+
+func (clog *cLog) load() error {
+	err := clog.buildCurrentFileName() // 构建今日日志文件前缀
+	if err != nil {
+		return err
+	}
+	name := filepath.Join(clog.logFilePath , clog.logFileName)
+	file , err := os.OpenFile(name , os.O_CREATE|os.O_APPEND|os.O_WRONLY , 0755)
+	if err != nil {
+		return err
+	}
+
+	clog.file = file
+	clog.setOutPut(io.Writer(clog.file))
+	clog.monitorPrint()
+
+	return nil
+}
+
+func (clog *cLog) buildCurrentFileName() error {
+	currentFilePrefix := clog.logLevel + "_" + time.Now().Format("20060102") // 构建今日日志文件前缀
+
+	// 遍历./log 文件夹下所有符合今日日志前缀的文件
+	files := make([]string , 0)
+	err := filepath.Walk(_FILE_PATH_ , func(path string, info os.FileInfo, err error) error {
+		if !info.IsDir() && strings.HasPrefix(info.Name() , currentFilePrefix) {
+			files = append(files , info.Name())
+		}
+		return nil
+	})
+	if err != nil {
+		return err
+	}
+
+	// 如果最后一个序号的今日日志文件未写满最大占用空间，则继续使用它，否则切换
+	if len(files) > 0 {
+		currentFilePrefix = fmt.Sprintf("%s_%d.%s" , currentFilePrefix , len(files) , _FILE_SUFFIX_)
+		fileInfo , _ := os.Stat(filepath.Join(_FILE_PATH_ , currentFilePrefix))
+		if fileInfo.Size()/1024/1204 > 20 {
+			currentFilePrefix = fmt.Sprintf("%s_%d.%s" , currentFilePrefix , len(files)+1 , _FILE_SUFFIX_)
+		}
+	} else {
+		currentFilePrefix = fmt.Sprintf("%s_%d.%s" , currentFilePrefix , len(files)+1 , _FILE_SUFFIX_)
+	}
+
+	clog.logFileName = currentFilePrefix
+	return nil
+}
+
+func (clog *cLog) setOutPut(w io.Writer) {
+	if clog.logger == nil {
+		clog.logger = log.New(w , "" , 0)
+	} else {
+		clog.logger.SetOutput(w)
+	}
+}
+
+func (clog *cLog) monitorPrint() {
+	go func() {
+		for {
+			msg := <- clog.msgChan
+			clog.logger.Println(msg)
+		}
+	}()
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+package cLog
+
+import (
+	"bytes"
+	"fmt"
+	"path"
+	"runtime"
+	"time"
+)
+
+const (
+	Trace = 1 << iota
+	Debug
+	System
+	Error
+)
+
+var logLevel = map[int]string{
+	Trace:"TRACE",
+	Debug:"DEBUG",
+	System:"SYSTEM",
+	Error:"ERROR",
+}
+
+func getGPID() string {
+	b := make([]byte, 64)
+	b = b[:runtime.Stack(b, false)]
+	b = bytes.TrimPrefix(b, []byte("goroutine "))
+	b = b[:bytes.IndexByte(b, ' ')]
+	return string(b)
+}
+
+func getCallerInfo(level int) (string , int , bool) {
+	_ , file , line , ok := runtime.Caller(level)
+	if !ok {
+		return "" , -1 , ok
+	}
+	_ , fileName := path.Split(file)
+	return fileName , line , true
+}
+
+func baseLog(model string , format string , infos...interface{}) {
+	logInfo := fmt.Sprintf("[%s]" , time.Now().Format("2006-01-02 15:04:05.999"))
+	if function , line , ok := getCallerInfo(3); ok {
+		logInfo = fmt.Sprintf("%s|[%s:%d]" , logInfo , function , line)
+	}
+	logInfo = fmt.Sprintf("%s|[%s]|[%s]|" , logInfo , getGPID() , model)
+	infosLog := fmt.Sprintf(format , infos...)
+	logInfo = fmt.Sprintf("%s%s" , logInfo , infosLog)
+	debugLog.msgChan <- logInfo
+}
+
+func LogTrace(format string, infos...interface{}) {
+	baseLog(logLevel[Trace] , format , infos...)
+}
+
+func LogDebug(format string, infos...interface{}) {
+	baseLog(logLevel[Debug] , format , infos...)
+}
+
+func LogSystem(format string, infos...interface{}) {
+	baseLog(logLevel[System] , format , infos...)
+}
+
+func LogError(format string, infos...interface{}) {
+	baseLog(logLevel[Error] , format , infos...)
+}
