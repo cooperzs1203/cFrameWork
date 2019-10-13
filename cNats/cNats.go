@@ -1,4 +1,9 @@
-package cNatsHelper
+/**
+* @Author: Cooper
+* @Date: 2019/10/13 20:07
+ */
+
+package cNats
 
 import (
 	"encoding/json"

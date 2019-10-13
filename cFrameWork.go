@@ -1,41 +1,33 @@
+/**
+* @Author: Cooper
+* @Date: 2019/10/13 19:53
+ */
+
 package cFrameWork
 
 import (
-	"cFrameWork/cConfigHelper"
-	"cFrameWork/cLogHelper"
-	"cFrameWork/cNatsHelper"
+	"cFrameWork/cConfig"
+	"cFrameWork/cLog"
+	"cFrameWork/cNats"
 	"errors"
 )
 
-type cFrameWork struct {
-	Mod string
-}
-
-var defaultCFrameWork = &cFrameWork{}
-
-
-func InitServe(mod string) error {
-	if mod == "" {
-		return errors.New("mod can not be empty")
-	}
-
-	defaultCFrameWork.Mod = mod
-	return nil
-}
-
-func InitNatsHelper(configFilePath string) error {
+func LoadAndServe(configFilePath string) error {
 	if configFilePath == "" {
-		return errors.New("configuration file path can not be empty")
+		return errors.New("we need configuration file for cFrameWork")
 	}
 
-	// load cNatsHelper configuration file
-	err := cConfigHelper.LoadNatsConfig(configFilePath)
+	config , err := cConfig.CFrameWorkConfigFileLoad(configFilePath)
 	if err != nil {
 		return err
 	}
 
-	// load cNatsHelper
-	err = cNatsHelper.InitAndLoadHelper(defaultCFrameWork.Mod , cConfigHelper.GetNatsConfig().GetAddr())
+	err = loadLogServe(config.LogConfig)
+	if err != nil {
+		return err
+	}
+
+	err = loadNatsServe(config.Mod , config.NatsConfig.GetAddress())
 	if err != nil {
 		return err
 	}
@@ -43,19 +35,11 @@ func InitNatsHelper(configFilePath string) error {
 	return nil
 }
 
-func InitLogHelper(configFilePath string) error {
-	if configFilePath == "" {
-		return errors.New("configuration file path can not be empty")
-	}
-
-	// load cLogHelper configuration file
-	err := cConfigHelper.LoadLogConfig(configFilePath)
-	if err != nil {
-		return err
-	}
-
-	// load cLogHelper
-	cLogHelper.InitLogSystem(cConfigHelper.GetLogConfig().MsgChanSpace)
-
+func loadLogServe(config cConfig.CLogConfig) error {
+	cLog.LoadLoggers(config.LogSumUp , config.LogConfigs)
 	return nil
+}
+
+func loadNatsServe(mod , addr string) error {
+	return cNats.InitAndLoadHelper(mod , addr)
 }
